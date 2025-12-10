@@ -164,8 +164,72 @@ export default function MatchList({
         );
     }
 
+    // Calculate stats from ALL loaded matches (memoized for performance)
+    const stats = useMemo(() => {
+        let kills = 0, deaths = 0, headshots = 0, totalShots = 0, wins = 0;
+
+        matches.forEach(match => {
+            // Find player in match
+            const player = match.players?.find((p: any) =>
+                p.name?.toLowerCase() === playerName.toLowerCase() &&
+                p.tag?.toLowerCase() === playerTag.toLowerCase()
+            ) || (match.stats ? { stats: match.stats, team: match.stats.team } : null);
+
+            if (player) {
+                const s = player.stats || player;
+                kills += s.kills || 0;
+                deaths += s.deaths || 0;
+                headshots += s.headshots || 0;
+                totalShots += (s.headshots || 0) + (s.bodyshots || 0) + (s.legshots || 0);
+
+                // Check win
+                const playerTeam = player.team_id || player.team || s.team;
+                if (match.teams) {
+                    if (Array.isArray(match.teams)) {
+                        const myTeam = match.teams.find((t: any) => t.team_id?.toLowerCase() === playerTeam?.toLowerCase());
+                        if (myTeam?.won) wins++;
+                    } else if (typeof match.teams.red === 'number') {
+                        const myRounds = playerTeam?.toLowerCase() === 'red' ? match.teams.red : match.teams.blue;
+                        const enemyRounds = playerTeam?.toLowerCase() === 'red' ? match.teams.blue : match.teams.red;
+                        if (myRounds > enemyRounds) wins++;
+                    }
+                }
+            }
+        });
+
+        const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toString();
+        const hs = totalShots > 0 ? Math.round((headshots / totalShots) * 100) : 0;
+        const winrate = matches.length > 0 ? Math.round((wins / matches.length) * 100) : 0;
+
+        return { kd, hs, winrate, total: matches.length };
+    }, [matches, playerName, playerTag]);
+
     return (
         <div>
+            {/* Dynamic Stats from ALL matches */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="glass-panel rounded-xl p-4 text-center">
+                    <i className="fa-solid fa-crosshairs text-xl text-white mb-2"></i>
+                    <p className="font-[family-name:var(--font-orbitron)] text-2xl font-bold text-white">{stats.kd}</p>
+                    <p className="text-gray-500 text-xs font-[family-name:var(--font-rajdhani)]">K/D</p>
+                </div>
+                <div className="glass-panel rounded-xl p-4 text-center">
+                    <i className="fa-solid fa-bullseye text-xl text-yellow-400 mb-2"></i>
+                    <p className="font-[family-name:var(--font-orbitron)] text-2xl font-bold text-yellow-400">{stats.hs}%</p>
+                    <p className="text-gray-500 text-xs font-[family-name:var(--font-rajdhani)]">HS%</p>
+                </div>
+                <div className="glass-panel rounded-xl p-4 text-center">
+                    <i className="fa-solid fa-trophy text-xl text-green-400 mb-2"></i>
+                    <p className={`font-[family-name:var(--font-orbitron)] text-2xl font-bold ${stats.winrate >= 50 ? 'text-green-400' : 'text-red-400'}`}>{stats.winrate}%</p>
+                    <p className="text-gray-500 text-xs font-[family-name:var(--font-rajdhani)]">Winrate</p>
+                </div>
+                <div className="glass-panel rounded-xl p-4 text-center">
+                    <i className="fa-solid fa-gamepad text-xl text-[#fd4556] mb-2"></i>
+                    <p className="font-[family-name:var(--font-orbitron)] text-2xl font-bold text-[#fd4556]">{stats.total}</p>
+                    <p className="text-gray-500 text-xs font-[family-name:var(--font-rajdhani)]">Matchs</p>
+                </div>
+            </div>
+
             {/* Season info */}
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <p className="text-gray-400 font-[family-name:var(--font-rajdhani)]">

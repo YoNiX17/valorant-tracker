@@ -88,35 +88,7 @@ export default async function PlayerPage({ params }: PageProps) {
             {/* Profile Card */}
             <ProfileCard account={data.account} mmr={data.mmr} />
 
-            {/* Stats Section */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <StatsCard
-                    icon="fa-crosshairs"
-                    label="K/D"
-                    value={calculateKD(data.matches, decodedName, decodedTag)}
-                    color="text-white"
-                />
-                <StatsCard
-                    icon="fa-bullseye"
-                    label="HS%"
-                    value={calculateHS(data.matches, decodedName, decodedTag) + '%'}
-                    color="text-yellow-400"
-                />
-                <StatsCard
-                    icon="fa-trophy"
-                    label="Winrate"
-                    value={calculateWinrate(data.matches, decodedName, decodedTag) + '%'}
-                    color="text-green-400"
-                />
-                <StatsCard
-                    icon="fa-gamepad"
-                    label="Matchs"
-                    value={data.matches.length.toString()}
-                    color="text-[#fd4556]"
-                />
-            </div>
-
-            {/* Match History */}
+            {/* Match History - now includes dynamic stats */}
             <div className="glass-panel rounded-2xl p-6">
                 <h3 className="font-[family-name:var(--font-orbitron)] text-xl font-bold text-white mb-6">
                     <i className="fa-solid fa-history mr-3 text-[#fd4556]"></i>HISTORIQUE DES MATCHS
