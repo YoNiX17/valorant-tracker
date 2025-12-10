@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { getTimeAgo } from '@/lib/api';
 
 interface MatchCardProps {
@@ -7,9 +8,16 @@ interface MatchCardProps {
     playerName: string;
     playerTag: string;
     onClick: () => void;
+    onDetailsClick?: () => void;
 }
 
-export default function MatchCard({ match, playerName, playerTag, onClick }: MatchCardProps) {
+export default function MatchCard({ match, playerName, playerTag, onClick, onDetailsClick }: MatchCardProps) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const metadata = match.meta || match.metadata;
 
     // Find player stats
@@ -75,16 +83,18 @@ export default function MatchCard({ match, playerName, playerTag, onClick }: Mat
     const mapName = metadata?.map?.name || 'Unknown';
     const modeName = metadata?.mode || metadata?.queue?.name || 'Competitive';
     const matchDate = metadata?.started_at ? new Date(metadata.started_at) : new Date();
-    const timeAgo = getTimeAgo(matchDate);
+
+    // IMPORTANT: Only render time-sensitive data on client to avoid hydration mismatch
+    const timeAgo = mounted ? getTimeAgo(matchDate) : '...';
+    const dateStr = mounted ? matchDate.toLocaleDateString() : '';
 
     return (
         <div
-            onClick={onClick}
-            className={`match-card glass-panel rounded-xl p-6 border border-[#fd4556]/20 ${isDraw ? 'match-draw' : isWin ? 'match-win' : 'match-loss'}`}
+            className={`match-card glass-panel rounded-xl p-6 border border-[#fd4556]/20 cursor-pointer hover:border-[#fd4556]/50 transition-all ${isDraw ? 'match-draw' : isWin ? 'match-win' : 'match-loss'}`}
         >
             <div className="flex items-center gap-4 flex-wrap">
                 {/* Agent */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3" onClick={onClick}>
                     {agentIcon && (
                         <img
                             src={agentIcon}
@@ -102,12 +112,12 @@ export default function MatchCard({ match, playerName, playerTag, onClick }: Mat
                 </div>
 
                 {/* Map */}
-                <div className="flex-1 text-center hidden md:block">
+                <div className="flex-1 text-center hidden md:block" onClick={onClick}>
                     <p className="font-[family-name:var(--font-rajdhani)] text-gray-400">{mapName}</p>
                 </div>
 
                 {/* Score */}
-                <div className="text-center px-6">
+                <div className="text-center px-6" onClick={onClick}>
                     <p className={`font-[family-name:var(--font-orbitron)] text-2xl font-black ${isDraw ? 'text-yellow-400' : isWin ? 'text-green-400' : 'text-red-400'}`}>
                         {score}
                     </p>
@@ -117,22 +127,30 @@ export default function MatchCard({ match, playerName, playerTag, onClick }: Mat
                 </div>
 
                 {/* KDA */}
-                <div className="text-center px-4">
+                <div className="text-center px-4" onClick={onClick}>
                     <p className="font-[family-name:var(--font-rajdhani)] text-lg text-white font-bold">{kda}</p>
                     <p className="text-xs text-gray-500">K/D: <span className={Number(kdRatio) >= 1 ? 'text-green-400' : 'text-red-400'}>{kdRatio}</span></p>
                 </div>
 
                 {/* Time */}
-                <div className="text-right">
+                <div className="text-right" onClick={onClick}>
                     <p className="text-sm text-gray-500 font-[family-name:var(--font-rajdhani)]">{timeAgo}</p>
-                    <p className="text-xs text-gray-600">{matchDate.toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-600">{dateStr}</p>
                 </div>
 
-                {/* Arrow */}
-                <div className="text-[#fd4556]">
-                    <i className="fa-solid fa-chevron-right"></i>
-                </div>
+                {/* Details Button */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (onDetailsClick) onDetailsClick();
+                        else onClick();
+                    }}
+                    className="px-4 py-2 bg-[#fd4556]/20 hover:bg-[#fd4556]/40 border border-[#fd4556]/30 rounded-lg text-[#fd4556] font-[family-name:var(--font-rajdhani)] text-sm transition-all hover:text-white"
+                >
+                    <i className="fa-solid fa-info-circle mr-1"></i>Détails
+                </button>
             </div>
         </div>
     );
 }
+
