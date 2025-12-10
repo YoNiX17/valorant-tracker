@@ -111,27 +111,21 @@ export default function MatchList({
             const data = await response.json();
 
             if (data.matches && data.matches.length > 0) {
-                // Filter to current season only
                 const currentSeasonMatches = data.matches.filter((m: any) => isCurrentSeason(m));
-
-                // Get existing IDs
                 const existingIds = new Set(matches.map(m => m.metadata?.match_id || m.meta?.id));
 
-                // Filter new matches
                 const newMatches = currentSeasonMatches.filter((m: any) => {
                     const id = m.metadata?.match_id || m.meta?.id;
                     return id && !existingIds.has(id);
                 });
 
                 if (newMatches.length > 0) {
-                    // Add to state
                     setMatches(prev => [...prev, ...newMatches].sort((a, b) => {
                         const dateA = new Date(a.metadata?.started_at || a.meta?.started_at || 0);
                         const dateB = new Date(b.metadata?.started_at || b.meta?.started_at || 0);
                         return dateB.getTime() - dateA.getTime();
                     }));
 
-                    // Save to Firebase
                     await saveMatchesToFirebase(puuid, newMatches);
                     console.log(`✅ Loaded ${newMatches.length} more matches`);
                 }
@@ -198,7 +192,6 @@ export default function MatchList({
 
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
-                {/* Show more from loaded matches */}
                 {hasMoreToDisplay && (
                     <button
                         onClick={showMore}
@@ -209,7 +202,6 @@ export default function MatchList({
                     </button>
                 )}
 
-                {/* Load more from API */}
                 <button
                     onClick={loadMoreFromAPI}
                     disabled={loadingMore}
@@ -235,6 +227,7 @@ export default function MatchList({
                     match={selectedMatch}
                     playerName={playerName}
                     playerTag={playerTag}
+                    region={region}
                     onClose={() => setSelectedMatch(null)}
                 />
             )}
@@ -242,15 +235,61 @@ export default function MatchList({
     );
 }
 
-// Match Modal Component - Full details
-function MatchModal({ match, playerName, playerTag, onClose }: {
+// Match Modal Component - Full details with Scoreboard/Rounds tabs
+function MatchModal({ match, playerName, playerTag, region, onClose }: {
     match: any;
     playerName: string;
     playerTag: string;
+    region: string;
     onClose: () => void;
 }) {
-    const metadata = match.metadata || match.meta;
-    const players = match.players || [];
+    const [activeTab, setActiveTab] = useState<'scoreboard' | 'rounds'>('scoreboard');
+    const [fullMatch, setFullMatch] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [selectedRound, setSelectedRound] = useState<number | null>(null);
+
+    // Load full match details with rounds
+    useEffect(() => {
+        async function loadMatchDetails() {
+            const matchId = match.metadata?.match_id || match.meta?.id;
+
+            if (!matchId) {
+                setFullMatch(match);
+                setLoading(false);
+                return;
+            }
+
+            // If match already has players array, use it
+            if (match.players && match.players.length > 0) {
+                setFullMatch(match);
+                setLoading(false);
+                return;
+            }
+
+            // Otherwise fetch full details
+            try {
+                const response = await fetch(`/api/match/${matchId}?region=${region}`);
+                const data = await response.json();
+
+                if (data.match) {
+                    setFullMatch(data.match);
+                } else {
+                    setFullMatch(match);
+                }
+            } catch (e) {
+                console.error('Error fetching match details:', e);
+                setFullMatch(match);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        loadMatchDetails();
+    }, [match, region]);
+
+    const metadata = fullMatch?.metadata || fullMatch?.meta || match.metadata || match.meta;
+    const players = fullMatch?.players || match.players || [];
+    const rounds = fullMatch?.rounds || [];
 
     // Sort players by score
     const redTeam = players
@@ -262,22 +301,26 @@ function MatchModal({ match, playerName, playerTag, onClose }: {
 
     // Scores
     let redRounds = 0, blueRounds = 0;
-    if (match.teams) {
-        if (typeof match.teams.red === 'number') {
-            redRounds = match.teams.red;
-            blueRounds = match.teams.blue;
-        } else if (Array.isArray(match.teams)) {
-            const redTeamData = match.teams.find((t: any) => t.team_id?.toLowerCase() === 'red');
-            const blueTeamData = match.teams.find((t: any) => t.team_id?.toLowerCase() === 'blue');
+    const matchData = fullMatch || match;
+    if (matchData.teams) {
+        if (typeof matchData.teams.red === 'number') {
+            redRounds = matchData.teams.red;
+            blueRounds = matchData.teams.blue;
+        } else if (Array.isArray(matchData.teams)) {
+            const redTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'red');
+            const blueTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'blue');
             redRounds = redTeamData?.rounds?.won || 0;
             blueRounds = blueTeamData?.rounds?.won || 0;
+        } else {
+            redRounds = matchData.teams.red?.rounds_won || 0;
+            blueRounds = matchData.teams.blue?.rounds_won || 0;
         }
     }
 
-    // Map info
     const mapName = metadata?.map?.name || 'Unknown';
     const mapImage = metadata?.map?.splash || '';
     const matchDate = metadata?.started_at ? new Date(metadata.started_at) : new Date();
+    const duration = metadata?.game_length_in_ms ? Math.floor(metadata.game_length_in_ms / 60000) : 0;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -290,101 +333,236 @@ function MatchModal({ match, playerName, playerTag, onClose }: {
                     <i className="fa-solid fa-times text-xl"></i>
                 </button>
 
-                {/* Map Header */}
-                <div
-                    className="h-48 relative"
-                    style={mapImage ? {
-                        backgroundImage: `url(${mapImage})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center'
-                    } : {
-                        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)'
-                    }}
-                >
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] to-transparent"></div>
-                    <div className="absolute bottom-0 left-0 w-full p-6">
-                        <h3 className="font-[family-name:var(--font-orbitron)] text-3xl font-bold text-white drop-shadow-lg">
-                            {mapName}
-                        </h3>
-                        <p className="text-gray-300 font-[family-name:var(--font-rajdhani)]">
-                            {matchDate.toLocaleDateString('fr-FR', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}
-                        </p>
+                {loading ? (
+                    <div className="text-center py-20">
+                        <i className="fa-solid fa-spinner fa-spin text-4xl text-[#fd4556] mb-4"></i>
+                        <p className="text-gray-400">Chargement des détails...</p>
                     </div>
-                </div>
-
-                <div className="p-6">
-                    {/* Score */}
-                    <div className="flex justify-center items-center gap-8 mb-8">
-                        <div className="text-center">
-                            <p className={`text-5xl font-[family-name:var(--font-orbitron)] font-black ${redRounds > blueRounds ? 'text-green-400' : 'text-red-400'}`}>
-                                {redRounds}
-                            </p>
-                            <p className="text-sm text-red-400 font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">Attackers</p>
-                        </div>
-                        <div className="text-4xl text-gray-600 font-[family-name:var(--font-orbitron)]">VS</div>
-                        <div className="text-center">
-                            <p className={`text-5xl font-[family-name:var(--font-orbitron)] font-black ${blueRounds > redRounds ? 'text-green-400' : 'text-blue-400'}`}>
-                                {blueRounds}
-                            </p>
-                            <p className="text-sm text-blue-400 font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">Defenders</p>
-                        </div>
-                    </div>
-
-                    {/* Scoreboard */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Red Team */}
-                        <div className="bg-gradient-to-br from-red-900/20 to-transparent rounded-xl p-4 border border-red-500/30">
-                            <h4 className="font-[family-name:var(--font-orbitron)] text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                                RED TEAM
-                            </h4>
-                            <div className="space-y-2">
-                                {redTeam.map((player: any, i: number) => (
-                                    <PlayerRow key={i} player={player} isCurrentPlayer={
-                                        player.name?.toLowerCase() === playerName.toLowerCase() &&
-                                        player.tag?.toLowerCase() === playerTag.toLowerCase()
-                                    } />
-                                ))}
+                ) : (
+                    <>
+                        {/* Map Header */}
+                        <div
+                            className="h-40 relative"
+                            style={mapImage ? {
+                                backgroundImage: `url(${mapImage})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center'
+                            } : {
+                                background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)'
+                            }}
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] to-transparent"></div>
+                            <div className="absolute bottom-0 left-0 w-full p-6">
+                                <h3 className="font-[family-name:var(--font-orbitron)] text-3xl font-bold text-white drop-shadow-lg">
+                                    {mapName}
+                                </h3>
+                                <div className="flex items-center gap-4 text-sm text-gray-300 font-[family-name:var(--font-rajdhani)]">
+                                    <span>{matchDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</span>
+                                    {duration > 0 && <span>• ⏱️ {duration} min</span>}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Blue Team */}
-                        <div className="bg-gradient-to-br from-blue-900/20 to-transparent rounded-xl p-4 border border-blue-500/30">
-                            <h4 className="font-[family-name:var(--font-orbitron)] text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                                BLUE TEAM
-                            </h4>
-                            <div className="space-y-2">
-                                {blueTeam.map((player: any, i: number) => (
-                                    <PlayerRow key={i} player={player} isCurrentPlayer={
-                                        player.name?.toLowerCase() === playerName.toLowerCase() &&
-                                        player.tag?.toLowerCase() === playerTag.toLowerCase()
-                                    } />
-                                ))}
+                        <div className="p-6">
+                            {/* Score */}
+                            <div className="flex justify-center items-center gap-8 mb-6">
+                                <div className="text-center">
+                                    <p className={`text-5xl font-[family-name:var(--font-orbitron)] font-black ${redRounds > blueRounds ? 'text-green-400' : 'text-red-400'}`}>
+                                        {redRounds}
+                                    </p>
+                                    <p className="text-sm text-red-400 font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">Red</p>
+                                </div>
+                                <div className="text-4xl text-gray-600 font-[family-name:var(--font-orbitron)]">VS</div>
+                                <div className="text-center">
+                                    <p className={`text-5xl font-[family-name:var(--font-orbitron)] font-black ${blueRounds > redRounds ? 'text-green-400' : 'text-blue-400'}`}>
+                                        {blueRounds}
+                                    </p>
+                                    <p className="text-sm text-blue-400 font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">Blue</p>
+                                </div>
                             </div>
+
+                            {/* Tabs */}
+                            <div className="flex gap-2 mb-6 justify-center">
+                                <button
+                                    onClick={() => setActiveTab('scoreboard')}
+                                    className={`px-4 py-2 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm transition-all ${activeTab === 'scoreboard'
+                                            ? 'bg-[#fd4556] text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    <i className="fa-solid fa-users mr-2"></i>Scoreboard
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('rounds')}
+                                    className={`px-4 py-2 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm transition-all ${activeTab === 'rounds'
+                                            ? 'bg-[#fd4556] text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    <i className="fa-solid fa-clock-rotate-left mr-2"></i>Rounds ({rounds.length})
+                                </button>
+                            </div>
+
+                            {/* Scoreboard Tab */}
+                            {activeTab === 'scoreboard' && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* Red Team */}
+                                    <div className="bg-gradient-to-br from-red-900/20 to-transparent rounded-xl p-4 border border-red-500/30">
+                                        <h4 className="font-[family-name:var(--font-orbitron)] text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                                            RED TEAM
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {redTeam.map((player: any, i: number) => (
+                                                <PlayerRow
+                                                    key={i}
+                                                    player={player}
+                                                    roundsPlayed={rounds.length || redRounds + blueRounds}
+                                                    isCurrentPlayer={
+                                                        player.name?.toLowerCase() === playerName.toLowerCase() &&
+                                                        player.tag?.toLowerCase() === playerTag.toLowerCase()
+                                                    }
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Blue Team */}
+                                    <div className="bg-gradient-to-br from-blue-900/20 to-transparent rounded-xl p-4 border border-blue-500/30">
+                                        <h4 className="font-[family-name:var(--font-orbitron)] text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                                            BLUE TEAM
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {blueTeam.map((player: any, i: number) => (
+                                                <PlayerRow
+                                                    key={i}
+                                                    player={player}
+                                                    roundsPlayed={rounds.length || redRounds + blueRounds}
+                                                    isCurrentPlayer={
+                                                        player.name?.toLowerCase() === playerName.toLowerCase() &&
+                                                        player.tag?.toLowerCase() === playerTag.toLowerCase()
+                                                    }
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Rounds Tab */}
+                            {activeTab === 'rounds' && (
+                                <div className="glass-panel rounded-xl p-6">
+                                    <h4 className="font-[family-name:var(--font-orbitron)] text-xl font-bold text-white mb-6 text-center">
+                                        <i className="fa-solid fa-clock-rotate-left mr-2 text-[#fd4556]"></i>
+                                        Round par Round
+                                    </h4>
+
+                                    {rounds.length > 0 ? (
+                                        <>
+                                            {/* Round buttons */}
+                                            <div className="flex flex-wrap gap-2 justify-center mb-6 p-4 bg-black/30 rounded-xl">
+                                                {rounds.map((round: any, i: number) => {
+                                                    const winTeam = round.winning_team?.toLowerCase() || '';
+                                                    const isRed = winTeam === 'red';
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            onClick={() => setSelectedRound(selectedRound === i ? null : i)}
+                                                            className={`w-12 h-12 rounded-lg font-[family-name:var(--font-rajdhani)] text-lg font-bold transition-all hover:scale-110 ${selectedRound === i ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-900' : ''
+                                                                } ${isRed
+                                                                    ? 'bg-gradient-to-br from-red-600 to-red-800 text-white border-2 border-red-400/50'
+                                                                    : 'bg-gradient-to-br from-blue-600 to-blue-800 text-white border-2 border-blue-400/50'
+                                                                }`}
+                                                        >
+                                                            {i + 1}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Selected round details */}
+                                            {selectedRound !== null && rounds[selectedRound] && (
+                                                <RoundDetails round={rounds[selectedRound]} roundNumber={selectedRound + 1} />
+                                            )}
+
+                                            <p className="text-center text-gray-500 text-sm mt-4">
+                                                <i className="fa-solid fa-hand-pointer mr-1"></i>
+                                                Clique sur un round pour voir les détails
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <p className="text-center text-gray-500 py-8">
+                                            <i className="fa-solid fa-circle-info mr-2"></i>
+                                            Données des rounds non disponibles
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                </div>
+                    </>
+                )}
             </div>
         </div>
     );
 }
 
+// Round Details Component
+function RoundDetails({ round, roundNumber }: { round: any; roundNumber: number }) {
+    const winTeam = round.winning_team?.toLowerCase() || '';
+    const endType = round.end_type || round.round_result || 'Unknown';
+
+    const endTypeLabels: Record<string, string> = {
+        'Eliminated': '💀 Élimination',
+        'Bomb defused': '🔧 Bombe désamorcée',
+        'Bomb detonated': '💥 Bombe explosée',
+        'Round timer expired': '⏱️ Temps écoulé',
+        'Surrendered': '🏳️ Abandon'
+    };
+
+    return (
+        <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 rounded-xl p-6 border border-[#fd4556]/30">
+            <div className="flex items-center justify-between mb-4">
+                <h5 className="font-[family-name:var(--font-orbitron)] text-lg font-bold text-white">
+                    Round {roundNumber}
+                </h5>
+                <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded-full text-sm font-[family-name:var(--font-rajdhani)] ${winTeam === 'red' ? 'bg-red-500/30 text-red-400' : 'bg-blue-500/30 text-blue-400'
+                        }`}>
+                        {winTeam === 'red' ? '🔴 Red Team' : '🔵 Blue Team'} wins
+                    </span>
+                    <span className="text-gray-400 text-sm">
+                        {endTypeLabels[endType] || endType}
+                    </span>
+                </div>
+            </div>
+
+            {/* Round stats */}
+            {round.player_stats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    {round.player_stats.slice(0, 4).map((stat: any, i: number) => (
+                        <div key={i} className="bg-black/30 rounded-lg p-3 text-center">
+                            <p className="text-white font-[family-name:var(--font-rajdhani)] text-sm truncate">
+                                {stat.player_display_name || 'Player'}
+                            </p>
+                            <p className="text-[#fd4556] font-bold">
+                                {stat.kills || 0} <span className="text-gray-500 text-xs">kills</span>
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Player Row in Modal
-function PlayerRow({ player, isCurrentPlayer }: { player: any; isCurrentPlayer: boolean }) {
+function PlayerRow({ player, roundsPlayed, isCurrentPlayer }: { player: any; roundsPlayed: number; isCurrentPlayer: boolean }) {
     const stats = player.stats || {};
     const kda = `${stats.kills || 0}/${stats.deaths || 0}/${stats.assists || 0}`;
 
-    // Calculate ACS
-    const roundsPlayed = 13;
-    const acs = Math.round((stats.score || 0) / roundsPlayed);
+    // Calculate ACS with actual rounds played
+    const acs = roundsPlayed > 0 ? Math.round((stats.score || 0) / roundsPlayed) : 0;
 
     // Calculate HS%
     const headshots = stats.headshots || 0;
@@ -396,10 +574,15 @@ function PlayerRow({ player, isCurrentPlayer }: { player: any; isCurrentPlayer: 
     // Agent info
     const agentName = player.character || player.agent?.name || '-';
     const agentId = player.agent?.id;
-    const agentIcon = agentId ? `https://media.valorant-api.com/agents/${agentId}/displayicon.png` : '';
+    const agentIcon = agentId
+        ? `https://media.valorant-api.com/agents/${agentId}/displayicon.png`
+        : player.assets?.agent?.small || '';
 
     // K/D ratio
     const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : stats.kills || 0;
+
+    // Player rank
+    const rankName = player.currenttier_patched || player.tier?.name || '';
 
     return (
         <div className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrentPlayer ? 'bg-[#fd4556]/20 border border-[#fd4556]/40 ring-1 ring-[#fd4556]/50' : 'bg-white/5 hover:bg-white/10'}`}>
@@ -418,7 +601,12 @@ function PlayerRow({ player, isCurrentPlayer }: { player: any; isCurrentPlayer: 
                 <p className={`font-[family-name:var(--font-rajdhani)] text-sm truncate ${isCurrentPlayer ? 'text-[#fd4556] font-bold' : 'text-white'}`}>
                     {player.name}#{player.tag}
                 </p>
-                <p className="text-xs text-gray-500">{agentName}</p>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{agentName}</span>
+                    {rankName && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-700/50 text-gray-300">{rankName}</span>
+                    )}
+                </div>
             </div>
 
             {/* KDA */}
