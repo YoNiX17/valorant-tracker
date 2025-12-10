@@ -53,7 +53,7 @@ export async function saveMatchesToFirebase(puuid: string, matches: any[]) {
     if (!puuid || matches.length === 0) return;
 
     const database = getDb();
-    const matchesRef = ref(database, `valorant-tracker/${puuid}/matches`);
+    const matchesRef = ref(database, `valorant/matches/${puuid}`);
 
     try {
         const snapshot = await get(matchesRef);
@@ -85,7 +85,7 @@ export async function loadMatchesFromFirebase(puuid: string): Promise<any[]> {
     if (!puuid) return [];
 
     const database = getDb();
-    const matchesRef = ref(database, `valorant-tracker/${puuid}/matches`);
+    const matchesRef = ref(database, `valorant/matches/${puuid}`);
 
     try {
         const snapshot = await get(matchesRef);
@@ -118,7 +118,7 @@ export async function deleteOldSeasonMatches(puuid: string): Promise<number> {
     if (!puuid) return 0;
 
     const database = getDb();
-    const matchesRef = ref(database, `valorant-tracker/${puuid}/matches`);
+    const matchesRef = ref(database, `valorant/matches/${puuid}`);
 
     try {
         const snapshot = await get(matchesRef);
@@ -136,7 +136,7 @@ export async function deleteOldSeasonMatches(puuid: string): Promise<number> {
 
         // Delete each old match
         for (const matchId of matchesToDelete) {
-            const matchRef = ref(database, `valorant-tracker/${puuid}/matches/${matchId}`);
+            const matchRef = ref(database, `valorant/matches/${puuid}/${matchId}`);
             await remove(matchRef);
         }
 
@@ -156,7 +156,7 @@ export async function getNewestMatchTimestamp(puuid: string): Promise<Date | nul
     if (!puuid) return null;
 
     const database = getDb();
-    const matchesRef = ref(database, `valorant-tracker/${puuid}/matches`);
+    const matchesRef = ref(database, `valorant/matches/${puuid}`);
 
     try {
         const snapshot = await get(matchesRef);
@@ -188,7 +188,7 @@ export async function getStoredMatchIds(puuid: string): Promise<Set<string>> {
     if (!puuid) return new Set();
 
     const database = getDb();
-    const matchesRef = ref(database, `valorant-tracker/${puuid}/matches`);
+    const matchesRef = ref(database, `valorant/matches/${puuid}`);
 
     try {
         const snapshot = await get(matchesRef);
