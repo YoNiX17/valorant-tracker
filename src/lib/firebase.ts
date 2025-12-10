@@ -25,7 +25,7 @@ function getDb() {
 export const CURRENT_SEASON = {
     id: 'v25a6',
     uuid: '4c4b8cff-43eb-13d3-8f14-96b783c90cd2',
-    name: 'Episode 9 - Act III'
+    name: 'V25 A6'
 };
 
 // Season list for filtering
