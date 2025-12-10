@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { getRankImage } from '@/lib/api';
 
 interface ProfileCardProps {
@@ -30,6 +33,12 @@ interface ProfileCardProps {
 }
 
 export default function ProfileCard({ account, mmr }: ProfileCardProps) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const currentRank = mmr?.current?.tier?.name || 'Unranked';
     const rankIcon = getRankImage(currentRank);
     const currentRR = mmr?.current?.rr || 0;
@@ -58,6 +67,22 @@ export default function ProfileCard({ account, mmr }: ProfileCardProps) {
         // Card is an object with URLs
         cardWide = account.card.wide || null;
         cardSmall = account.card.small || null;
+    }
+
+    // Show skeleton during SSR to prevent hydration mismatch
+    if (!mounted) {
+        return (
+            <div className="glass-panel rounded-2xl overflow-hidden mb-8 animate-pulse">
+                <div className="h-56 md:h-64 bg-gray-800"></div>
+                <div className="p-6 bg-gradient-to-r from-[#0a0a0a] to-[#111]">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="h-24 bg-gray-800 rounded-xl"></div>
+                        <div className="h-24 bg-gray-800 rounded-xl"></div>
+                        <div className="h-24 bg-gray-800 rounded-xl"></div>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
