@@ -26,6 +26,7 @@ export default function MatchList({
     region,
     puuid
 }: MatchListProps) {
+    const [mounted, setMounted] = useState(false);
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -33,6 +34,11 @@ export default function MatchList({
     const [selectedMatch, setSelectedMatch] = useState<any>(null);
     const [apiOffset, setApiOffset] = useState(10);
     const [cleanupDone, setCleanupDone] = useState(false);
+
+    // Fix hydration mismatch - only render on client
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Load matches: Firebase first, then merge with API matches
     useEffect(() => {
@@ -146,7 +152,8 @@ export default function MatchList({
     const displayedMatches = matches.slice(0, displayCount);
     const hasMoreToDisplay = displayCount < matches.length;
 
-    if (loading) {
+    // Show loading state during SSR and initial load
+    if (!mounted || loading) {
         return (
             <div className="text-center py-12">
                 <i className="fa-solid fa-spinner fa-spin text-4xl text-[#fd4556] mb-4"></i>
@@ -259,14 +266,16 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                 return;
             }
 
-            // If match already has players array, use it
+            // If match already has players array, use it - NO API CALL NEEDED
             if (match.players && match.players.length > 0) {
+                console.log('📋 Using existing match data (no API call)');
                 setFullMatch(match);
                 setLoading(false);
                 return;
             }
 
-            // Otherwise fetch full details
+            // ONLY fetch API if players array is missing (stored-matches format from Firebase)
+            console.log('🌐 Fetching full match details from API...');
             try {
                 const response = await fetch(`/api/match/${matchId}?region=${region}`);
                 const data = await response.json();
@@ -386,8 +395,8 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                                 <button
                                     onClick={() => setActiveTab('scoreboard')}
                                     className={`px-4 py-2 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm transition-all ${activeTab === 'scoreboard'
-                                            ? 'bg-[#fd4556] text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        ? 'bg-[#fd4556] text-white'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                         }`}
                                 >
                                     <i className="fa-solid fa-users mr-2"></i>Scoreboard
@@ -395,8 +404,8 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                                 <button
                                     onClick={() => setActiveTab('rounds')}
                                     className={`px-4 py-2 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm transition-all ${activeTab === 'rounds'
-                                            ? 'bg-[#fd4556] text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        ? 'bg-[#fd4556] text-white'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                         }`}
                                 >
                                     <i className="fa-solid fa-clock-rotate-left mr-2"></i>Rounds ({rounds.length})
