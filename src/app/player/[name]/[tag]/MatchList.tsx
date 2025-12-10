@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import MatchCard from '@/components/MatchCard';
 import {
     loadMatchesFromFirebase,
@@ -302,31 +302,36 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
     const rounds = fullMatch?.rounds || [];
     const kills = fullMatch?.kills || [];
 
-    // Sort players by score
-    const redTeam = players
-        .filter((p: any) => (p.team_id || p.team)?.toLowerCase() === 'red')
-        .sort((a: any, b: any) => (b.stats?.score || 0) - (a.stats?.score || 0));
-    const blueTeam = players
-        .filter((p: any) => (p.team_id || p.team)?.toLowerCase() === 'blue')
-        .sort((a: any, b: any) => (b.stats?.score || 0) - (a.stats?.score || 0));
+    // Memoize heavy calculations to reduce lag
+    const { redTeam, blueTeam, redRounds, blueRounds } = useMemo(() => {
+        // Sort players by score
+        const redTeam = players
+            .filter((p: any) => (p.team_id || p.team)?.toLowerCase() === 'red')
+            .sort((a: any, b: any) => (b.stats?.score || 0) - (a.stats?.score || 0));
+        const blueTeam = players
+            .filter((p: any) => (p.team_id || p.team)?.toLowerCase() === 'blue')
+            .sort((a: any, b: any) => (b.stats?.score || 0) - (a.stats?.score || 0));
 
-    // Scores
-    let redRounds = 0, blueRounds = 0;
-    const matchData = fullMatch || match;
-    if (matchData.teams) {
-        if (typeof matchData.teams.red === 'number') {
-            redRounds = matchData.teams.red;
-            blueRounds = matchData.teams.blue;
-        } else if (Array.isArray(matchData.teams)) {
-            const redTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'red');
-            const blueTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'blue');
-            redRounds = redTeamData?.rounds?.won || 0;
-            blueRounds = blueTeamData?.rounds?.won || 0;
-        } else {
-            redRounds = matchData.teams.red?.rounds_won || 0;
-            blueRounds = matchData.teams.blue?.rounds_won || 0;
+        // Scores
+        let redRounds = 0, blueRounds = 0;
+        const matchData = fullMatch || match;
+        if (matchData.teams) {
+            if (typeof matchData.teams.red === 'number') {
+                redRounds = matchData.teams.red;
+                blueRounds = matchData.teams.blue;
+            } else if (Array.isArray(matchData.teams)) {
+                const redTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'red');
+                const blueTeamData = matchData.teams.find((t: any) => t.team_id?.toLowerCase() === 'blue');
+                redRounds = redTeamData?.rounds?.won || 0;
+                blueRounds = blueTeamData?.rounds?.won || 0;
+            } else {
+                redRounds = matchData.teams.red?.rounds_won || 0;
+                blueRounds = matchData.teams.blue?.rounds_won || 0;
+            }
         }
-    }
+
+        return { redTeam, blueTeam, redRounds, blueRounds };
+    }, [players, fullMatch, match]);
 
     const mapName = metadata?.map?.name || 'Unknown';
     const mapImage = metadata?.map?.splash || '';
