@@ -73,10 +73,13 @@ export default function MatchCard({ match, playerName, playerTag, onClick, onDet
     const kda = `${stats.kills || 0}/${stats.deaths || 0}/${stats.assists || 0}`;
     const kdRatio = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : stats.kills || 0;
 
-    // Agent
-    const agentName = match.stats?.character?.name || 'Unknown';
-    const agentId = match.stats?.character?.id || (match.players?.find((p: any) =>
-        p.name.toLowerCase() === playerName.toLowerCase())?.agent?.id);
+    // Agent - check multiple sources for name and icon
+    const player = match.players?.find((p: any) =>
+        p.name?.toLowerCase() === playerName.toLowerCase() &&
+        p.tag?.toLowerCase() === playerTag.toLowerCase()
+    );
+    const agentName = player?.character || player?.agent?.name || match.stats?.character?.name || 'Unknown';
+    const agentId = player?.agent?.id || match.stats?.character?.id;
     const agentIcon = agentId ? `https://media.valorant-api.com/agents/${agentId}/displayicon.png` : '';
 
     // Map & time
