@@ -6,7 +6,7 @@ interface ProfileCardProps {
         tag: string;
         region: string;
         account_level: number;
-        card?: {
+        card?: string | {
             wide?: string;
             small?: string;
             large?: string;
@@ -46,10 +46,19 @@ export default function ProfileCard({ account, mmr }: ProfileCardProps) {
     const games = seasonStats?.games || 0;
     const winrate = games > 0 ? Math.round((wins / games) * 100) : 0;
 
-    // Get card images safely
-    const cardWide = typeof account.card?.wide === 'string' ? account.card.wide : null;
-    const cardSmall = typeof account.card?.small === 'string' ? account.card.small : null;
-    const cardLarge = typeof account.card?.large === 'string' ? account.card.large : null;
+    // Get card images - handle both string (UUID) and object formats
+    let cardWide: string | null = null;
+    let cardSmall: string | null = null;
+
+    if (typeof account.card === 'string') {
+        // Card is a UUID - use valorant-api.com
+        cardWide = `https://media.valorant-api.com/playercards/${account.card}/wideart.png`;
+        cardSmall = `https://media.valorant-api.com/playercards/${account.card}/smallart.png`;
+    } else if (account.card) {
+        // Card is an object with URLs
+        cardWide = account.card.wide || null;
+        cardSmall = account.card.small || null;
+    }
 
     return (
         <div className="glass-panel rounded-2xl overflow-hidden mb-8">
