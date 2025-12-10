@@ -36,16 +36,23 @@ export const SEASONS = [
     { id: 'v24a3', uuid: 'e94d2ea8-4b13-5819-98fe-8d920d0f5fc5', name: 'Episode 8 - Act III' },
 ];
 
-// Get season from match
+// Get season from match - returns UUID or short ID
 export function getMatchSeason(match: any): string | null {
     const metadata = match.metadata || match.meta;
-    return metadata?.season?.id || metadata?.season_id || null;
+    // API can return season as object with id or just string
+    const seasonData = metadata?.season || {};
+    return seasonData?.id || seasonData?.uuid || metadata?.season_id || null;
 }
 
-// Check if match is from current season
+// Check if match is from current season (checks both UUID and ID formats)
 export function isCurrentSeason(match: any): boolean {
     const seasonId = getMatchSeason(match);
-    return seasonId === CURRENT_SEASON.uuid;
+    if (!seasonId) return false;
+    // Check against both UUID and short ID since API format varies
+    return seasonId === CURRENT_SEASON.uuid ||
+        seasonId === CURRENT_SEASON.id ||
+        seasonId.toLowerCase().includes('v25a6') ||
+        seasonId.toLowerCase().includes('e10a6');
 }
 
 // Save matches to Firebase (only current season)
