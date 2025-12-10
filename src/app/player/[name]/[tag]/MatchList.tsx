@@ -254,6 +254,7 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
     const [fullMatch, setFullMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState<number | null>(null);
+    const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
 
     // Load full match details with rounds
     useEffect(() => {
@@ -299,6 +300,7 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
     const metadata = fullMatch?.metadata || fullMatch?.meta || match.metadata || match.meta;
     const players = fullMatch?.players || match.players || [];
     const rounds = fullMatch?.rounds || [];
+    const kills = fullMatch?.kills || [];
 
     // Sort players by score
     const redTeam = players
@@ -431,6 +433,7 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                                                         player.name?.toLowerCase() === playerName.toLowerCase() &&
                                                         player.tag?.toLowerCase() === playerTag.toLowerCase()
                                                     }
+                                                    onShowDetails={() => setSelectedPlayer(player)}
                                                 />
                                             ))}
                                         </div>
@@ -452,6 +455,7 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                                                         player.name?.toLowerCase() === playerName.toLowerCase() &&
                                                         player.tag?.toLowerCase() === playerTag.toLowerCase()
                                                     }
+                                                    onShowDetails={() => setSelectedPlayer(player)}
                                                 />
                                             ))}
                                         </div>
@@ -511,6 +515,16 @@ function MatchModal({ match, playerName, playerTag, region, onClose }: {
                         </div>
                     </>
                 )}
+
+                {/* Player Details Modal */}
+                {selectedPlayer && (
+                    <PlayerDetailsModal
+                        player={selectedPlayer}
+                        rounds={rounds}
+                        kills={kills}
+                        onClose={() => setSelectedPlayer(null)}
+                    />
+                )}
             </div>
         </div>
     );
@@ -566,7 +580,12 @@ function RoundDetails({ round, roundNumber }: { round: any; roundNumber: number 
 }
 
 // Player Row in Modal
-function PlayerRow({ player, roundsPlayed, isCurrentPlayer }: { player: any; roundsPlayed: number; isCurrentPlayer: boolean }) {
+function PlayerRow({ player, roundsPlayed, isCurrentPlayer, onShowDetails }: {
+    player: any;
+    roundsPlayed: number;
+    isCurrentPlayer: boolean;
+    onShowDetails?: () => void;
+}) {
     const stats = player.stats || {};
     const kda = `${stats.kills || 0}/${stats.deaths || 0}/${stats.assists || 0}`;
 
@@ -640,6 +659,209 @@ function PlayerRow({ player, roundsPlayed, isCurrentPlayer }: { player: any; rou
             <div className="text-center px-3 hidden md:block">
                 <p className="font-[family-name:var(--font-rajdhani)] text-sm text-cyan-400">{hsPercent}%</p>
                 <p className="text-xs text-gray-500">HS%</p>
+            </div>
+
+            {/* Details Button */}
+            {onShowDetails && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onShowDetails();
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-700/50 hover:bg-[#fd4556]/50 text-gray-400 hover:text-white text-xs flex items-center justify-center transition-all"
+                    title="Voir les détails du joueur"
+                >
+                    <i className="fa-solid fa-chart-bar"></i>
+                </button>
+            )}
+        </div>
+    );
+}
+
+// Player Details Modal - Shows detailed stats for a specific player
+function PlayerDetailsModal({ player, rounds, kills, onClose }: {
+    player: any;
+    rounds: any[];
+    kills: any[];
+    onClose: () => void;
+}) {
+    const stats = player.stats || {};
+    const abilities = player.ability_casts || {};
+    const roundsPlayed = rounds.length || 1;
+
+    // Calculate stats
+    const acs = Math.round((stats.score || 0) / roundsPlayed);
+    const headshots = stats.headshots || 0;
+    const bodyshots = stats.bodyshots || 0;
+    const legshots = stats.legshots || 0;
+    const totalShots = headshots + bodyshots + legshots;
+    const hsPercent = totalShots > 0 ? Math.round((headshots / totalShots) * 100) : 0;
+    const damageDealt = player.damage_made || stats.damage?.dealt || stats.damage || 0;
+
+    // Ability casts - handle both API formats
+    const cCast = abilities.c_cast || abilities.grenade || 0;
+    const qCast = abilities.q_cast || abilities.ability1 || 0;
+    const eCast = abilities.e_cast || abilities.ability2 || 0;
+    const xCast = abilities.x_cast || abilities.ultimate || 0;
+
+    // Agent info
+    const agentName = player.character || player.agent?.name || 'Unknown';
+    const agentIcon = player.assets?.agent?.small ||
+        (player.agent?.id ? `https://media.valorant-api.com/agents/${player.agent.id}/displayicon.png` : '');
+    const rankName = player.currenttier_patched || player.tier?.name || '';
+
+    // Get player's kills and deaths per round
+    const playerPuuid = player.puuid;
+    const playerKills = kills.filter((k: any) => k.killer?.puuid === playerPuuid || k.killer_puuid === playerPuuid);
+    const playerDeaths = kills.filter((k: any) => k.victim?.puuid === playerPuuid || k.victim_puuid === playerPuuid);
+
+    return (
+        <div
+            className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+            onClick={onClose}
+        >
+            <div
+                className="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-[#fd4556]/30 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="bg-gradient-to-r from-[#fd4556]/20 to-purple-500/20 p-5 border-b border-white/10">
+                    <div className="flex items-center gap-4">
+                        {agentIcon && (
+                            <img
+                                src={agentIcon}
+                                alt={agentName}
+                                className="w-20 h-20 rounded-xl border-2 border-[#fd4556]/50 shadow-lg"
+                            />
+                        )}
+                        <div className="flex-1">
+                            <h2 className="font-[family-name:var(--font-orbitron)] text-2xl font-bold text-white">
+                                {player.name}<span className="text-gray-400">#{player.tag}</span>
+                            </h2>
+                            <div className="flex items-center gap-3 mt-1">
+                                <span className="text-[#fd4556] font-[family-name:var(--font-rajdhani)]">{agentName}</span>
+                                {rankName && (
+                                    <span className="px-3 py-1 bg-gradient-to-r from-[#fd4556]/30 to-purple-500/30 rounded-full text-white font-[family-name:var(--font-rajdhani)] text-sm border border-[#fd4556]/30">
+                                        🏆 {rankName}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-400 hover:text-white text-2xl"
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="p-5 overflow-y-auto flex-1">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                        <div className="text-center p-4 rounded-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+                            <p className="font-[family-name:var(--font-rajdhani)] text-2xl text-white font-bold">
+                                {stats.kills || 0}/{stats.deaths || 0}/{stats.assists || 0}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">K/D/A</p>
+                        </div>
+                        <div className="text-center p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-green-500/0 border border-green-500/20">
+                            <p className="font-[family-name:var(--font-rajdhani)] text-2xl text-green-400 font-bold">{acs}</p>
+                            <p className="text-xs text-gray-400 mt-1">ACS</p>
+                        </div>
+                        <div className="text-center p-4 rounded-xl bg-gradient-to-br from-orange-500/10 to-orange-500/0 border border-orange-500/20">
+                            <p className="font-[family-name:var(--font-rajdhani)] text-2xl text-orange-400 font-bold">{damageDealt}</p>
+                            <p className="text-xs text-gray-400 mt-1">Damage</p>
+                        </div>
+                        <div className="text-center p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-yellow-500/0 border border-yellow-500/20">
+                            <p className="font-[family-name:var(--font-rajdhani)] text-2xl text-yellow-400 font-bold">{hsPercent}%</p>
+                            <p className="text-xs text-gray-400 mt-1">HS%</p>
+                        </div>
+                    </div>
+
+                    {/* Shot Distribution & Abilities */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        {/* Shot Distribution */}
+                        <div className="p-3 rounded-lg bg-black/30">
+                            <p className="text-white font-bold mb-2 font-[family-name:var(--font-rajdhani)]">Distribution des tirs</p>
+                            <div className="space-y-1 text-sm">
+                                <p>🎯 Head: <span className="text-yellow-400">{headshots}</span></p>
+                                <p>💪 Body: <span className="text-white">{bodyshots}</span></p>
+                                <p>🦵 Leg: <span className="text-gray-400">{legshots}</span></p>
+                            </div>
+                        </div>
+
+                        {/* Abilities */}
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-purple-900/30 to-black/30 border border-purple-500/20">
+                            <p className="text-white font-bold mb-3 font-[family-name:var(--font-rajdhani)]">✨ Abilities utilisées</p>
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="text-center p-2 rounded bg-black/30">
+                                    <div className="w-8 h-8 mx-auto mb-1 bg-purple-500/20 rounded flex items-center justify-center text-xs text-purple-400 font-bold">C</div>
+                                    <p className="text-purple-400 font-[family-name:var(--font-rajdhani)] font-bold text-lg">{cCast}</p>
+                                </div>
+                                <div className="text-center p-2 rounded bg-black/30">
+                                    <div className="w-8 h-8 mx-auto mb-1 bg-purple-500/20 rounded flex items-center justify-center text-xs text-purple-400 font-bold">Q</div>
+                                    <p className="text-purple-400 font-[family-name:var(--font-rajdhani)] font-bold text-lg">{qCast}</p>
+                                </div>
+                                <div className="text-center p-2 rounded bg-black/30">
+                                    <div className="w-8 h-8 mx-auto mb-1 bg-purple-500/20 rounded flex items-center justify-center text-xs text-purple-400 font-bold">E</div>
+                                    <p className="text-purple-400 font-[family-name:var(--font-rajdhani)] font-bold text-lg">{eCast}</p>
+                                </div>
+                                <div className="text-center p-2 rounded bg-black/30">
+                                    <div className="w-8 h-8 mx-auto mb-1 bg-yellow-500/20 rounded flex items-center justify-center text-xs text-yellow-400 font-bold">X</div>
+                                    <p className="text-yellow-400 font-[family-name:var(--font-rajdhani)] font-bold text-lg">{xCast}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Round by Round */}
+                    <div>
+                        <p className="text-white font-bold mb-3 font-[family-name:var(--font-rajdhani)]">Round par Round</p>
+                        <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-2">
+                            {rounds.map((round: any, i: number) => {
+                                const roundKills = playerKills.filter((k: any) => k.round === i);
+                                const roundDeaths = playerDeaths.filter((k: any) => k.round === i);
+                                const won = round.winning_team?.toLowerCase() === player.team?.toLowerCase() ||
+                                    round.winning_team?.toLowerCase() === (player.team_id || '').toLowerCase();
+
+                                // Build kills text
+                                const killsText = roundKills.map((k: any) => {
+                                    const victim = k.victim?.name || k.victim_display_name || '?';
+                                    const weapon = k.damage_weapon_name || k.weapon?.name || '';
+                                    return `${victim} (${weapon})`;
+                                }).join(', ');
+
+                                const deathBy = roundDeaths.length > 0
+                                    ? roundDeaths[0]?.killer?.name || roundDeaths[0]?.killer_display_name || '?'
+                                    : '';
+
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`p-2 rounded bg-black/40 border-l-2 ${won ? 'border-green-500' : 'border-red-500'}`}
+                                    >
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className={`font-bold ${won ? 'text-green-400' : 'text-red-400'}`}>R{i + 1}</span>
+                                            <span className="text-gray-500">
+                                                {round.end_type || round.result || ''}
+                                            </span>
+                                        </div>
+                                        {roundKills.length > 0 && (
+                                            <div className="text-xs text-green-300 mt-1">
+                                                💀 {roundKills.length}K: {killsText}
+                                            </div>
+                                        )}
+                                        {deathBy && (
+                                            <div className="text-xs text-red-400 mt-1">☠️ {deathBy}</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
